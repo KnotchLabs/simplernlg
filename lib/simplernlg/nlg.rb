@@ -8,6 +8,7 @@ module SimplerNLG
   # end
 
   class NLG
+    MODIFIERS = [:add_post_modifier, :add_pre_modifier, :add_front_modifier]
 
     # use module's imported packages
     def self.const_missing const ; SimplerNLG.const_missing const ; end
@@ -70,6 +71,8 @@ module SimplerNLG
             modded_args.drop(2).each{ |additional_coordinate| svo[type].add_coordinate(additional_coordinate) }
           end
           svo[type].set_feature Feature::CONJUNCTION, conjunction_type if conjunction_type
+        elsif arg.is_a?(Hash) and [:s, :o].include?(type)
+          svo[type] = self.noun_phrase_helper(arg)
         end
       end
 
@@ -131,7 +134,7 @@ module SimplerNLG
       #ELIDED is pretty useless (if not dangerous! - NullPointerException in OrthographyProcessor.removePunctSpace())
 
       # COMPLEMENT
-      [input[:complement],input[:complements],input[:c]].flatten.each do |complement|
+      [input[:complement],input[:complements],input[:c]].flatten(1).each do |complement|
         if false # && complement.is_a?(Clause)
 
           # ["in any year since 1992 when Atlantic tropical storm-related deaths ended in an odd number", "except 1996"] )
@@ -154,7 +157,17 @@ module SimplerNLG
         end
       end
 
-      with input[:pp]
+      [input[:prepositional_phrases], input[:prepositional_phrase], input[:pp]].flatten(1) do |pp|
+        if pp[:position] == :front
+          clause.add_front_modifier(pp)
+        elsif pp[:position] == :pre
+          clause.add_pre_modifier(pp)
+        elsif pp[:position] == :post
+          clause.add_post_modifier(pp)
+        else
+          clause.add_modifier(pp)
+        end
+      end
 
       return clause
 
@@ -162,7 +175,7 @@ module SimplerNLG
 
     def self.mod_helper type, container, input
       core = container.content.first
-      mod_phrase = @@factory.create_noun_phrase core if [:s, :o].include? type
+      mod_phrase = self.noun_phrase_helper core if [:s, :o].include? type
       mod_phrase = @@factory.create_verb_phrase core if type == :v
       container.content.drop(1).each do |modifier|
         case container.sub_type
@@ -191,6 +204,18 @@ module SimplerNLG
     def self.pre_mod   *args ; mod_container = mod *args ; mod_container.sub_type = :pre       ; return mod_container ; end
     def self.post_mod  *args ; mod_container = mod *args ; mod_container.sub_type = :post      ; return mod_container ; end
     def self.adj       *args ; mod_container = mod *args ; mod_container.sub_type = :adjective ; return mod_container ; end
+
+    def self.noun_phrase_helper word_or_hash
+      return nil if word_or_hash.nil?
+      if word_or_hash.respond_to? :has_key? # testing if it's a Hash, but in a more ducktypingy way than is_a?(Hash)
+        np = @@factory.create_noun_phrase word_or_hash[:noun]
+        np.set_specifier( (spec = self.noun_phrase_helper(word_or_hash[:specifier]); spec.set_feature(Feature::POSSESSIVE, true) unless spec.nil?; spec) || word_or_hash[:determiner])
+        np
+      else
+        @@factory.create_noun_phrase word_or_hash
+      end
+    end
+
 
     class Container
       attr_accessor :type, :sub_type, :content
