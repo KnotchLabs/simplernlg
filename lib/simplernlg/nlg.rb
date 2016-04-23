@@ -1,12 +1,16 @@
 # -*- coding: UTF-8 -*-
 module SimplerNLG
 
-  # class Realiser
-  #   def realize_sentence(i)
-  #     realise_sentence(i)
-  #   end
-  # end
-
+  # TODO: finish the rephrasing thing in realize_sentence.
+  # TODO: preposition's :rest should be clear that it's a noun, so maybe :o/:object or :s/:subject??
+  # TODO: clausal complements for prepositional phrases. check for :v? in the prepositional phrase area; "after the war ended"
+  # TODO: tests!
+  # TODO: deal with noun phrases in template_for_how_generate_prediction_data_creates_the_output_above (not needed any more, just make them hashes)
+  # oh fuck how do I distinguish the :pp => [] case for having multiple prepositional phrases
+  #    from wanting it to choose one of multiple PPs?!?!
+  #  [[{}], [{}], [{}]] versus [{}, {}, {}]
+  # OKAY, I give up, let's specify the rephraseables somewhere else.
+  
   class NLG
     MODIFIERS = [:add_post_modifier, :add_pre_modifier, :add_front_modifier]
 
@@ -51,7 +55,7 @@ module SimplerNLG
     end
 
     def self.phrase input
-
+      return input if input.is_a?(String)
       clause = @@factory.create_clause
       
       # SVO (init)
@@ -123,9 +127,6 @@ module SimplerNLG
       with input[:progressive] do |progressive|
         clause.set_feature Feature::PROGRESSIVE, progressive
       end
-      # with input[:prepositional_phrase] || input[:pp] do |pp|
-      #   clause
-      # end
       with input[:modal] do |modal|
         clause.set_feature Feature::MODAL, modal
       end
@@ -134,38 +135,21 @@ module SimplerNLG
       #ELIDED is pretty useless (if not dangerous! - NullPointerException in OrthographyProcessor.removePunctSpace())
 
       # COMPLEMENT
-      [input[:complement],input[:complements],input[:c]].flatten(1).each do |complement|
-        if false # && complement.is_a?(Clause)
-
-          # ["in any year since 1992 when Atlantic tropical storm-related deaths ended in an odd number", "except 1996"] )
-
-
-          # np = @@factory.create_noun_phrase("1996"); # was nlgFactory, of type NPPhraseSpec
-          # pp = @@factory.createPrepositionPhrase(); # of type PPPhraseSpec 
-          # pp.add_complement(np);
-          # pp.set_preposition("since");
-          # clause.add_complement pp
-
-          # np_place = @@factory.create_noun_phrase("the", "park"); # was nlgFactory, of type NPPhraseSpec
-          # pp_place = @@factory.createPrepositionPhrase(); # of type PPPhraseSpec 
-          # pp_place.add_complement(np_place);
-          # pp_place.set_preposition("in");
-
-          clause.add_complement pp_place
-        else
-          clause.add_complement complement.to_s # to_s added for method signature reasons...
-        end
+      [input[:complement],input[:complements],input[:c]].flatten(1).compact.each do |complement|
+        clause.add_complement self.phrase(complement) # to_s added for method signature reasons...
       end
 
-      [input[:prepositional_phrases], input[:prepositional_phrase], input[:pp]].flatten(1) do |pp|
+      [input[:prepositional_phrases], input[:prepositional_phrase], input[:pp]].flatten(1).compact.each do |pp|
+        prep_phrase = prep_phrase_helper pp
         if pp[:position] == :front
-          clause.add_front_modifier(pp)
+          clause.add_front_modifier(prep_phrase)
         elsif pp[:position] == :pre
-          clause.add_pre_modifier(pp)
+          clause.add_pre_modifier(prep_phrase)
         elsif pp[:position] == :post
-          clause.add_post_modifier(pp)
+          clause.add_post_modifier(prep_phrase)
         else
-          clause.add_modifier(pp)
+          clause.add_post_modifier(prep_phrase)
+          # random default choice.)
         end
       end
 
@@ -205,11 +189,48 @@ module SimplerNLG
     def self.post_mod  *args ; mod_container = mod *args ; mod_container.sub_type = :post      ; return mod_container ; end
     def self.adj       *args ; mod_container = mod *args ; mod_container.sub_type = :adjective ; return mod_container ; end
 
+    def self.prep_phrase_helper pp
+      # PROBLEM HERE is that 
+      # creating a whole clause means it's not a noun phrase, which it should be
+      # maybe it always should be?
+      # rather than "phrase"
+
+      prep_phrase = NLG.factory.create_preposition_phrase(pp[:preposition] || pp[:prep], (pp[:rest].respond_to?(:has_key?) ? (phrased_rest = self.noun_phrase_helper(pp[:rest]); phrased_rest  ) : pp[:rest]  ))
+      prep_phrase.set_feature(NLG::Feature::APPOSITIVE, pp[:appositive]) 
+      # TODO: is it "appositive" if there's more than one word in the phrase? or if it's not an adverb and adjective?
+      NLG.realizer.setCommaSepCuephrase(true) # ensures we get a comma (this, plus the appositive feature)
+      prep_phrase
+    end
+
     def self.noun_phrase_helper word_or_hash
       return nil if word_or_hash.nil?
       if word_or_hash.respond_to? :has_key? # testing if it's a Hash, but in a more ducktypingy way than is_a?(Hash)
-        np = @@factory.create_noun_phrase word_or_hash[:noun]
-        np.set_specifier( (spec = self.noun_phrase_helper(word_or_hash[:specifier]); spec.set_feature(Feature::POSSESSIVE, true) unless spec.nil?; spec) || word_or_hash[:determiner])
+        if word_or_hash.has_key? :template_string
+          # "%05d" % 123                              #=> "00123"
+          # "%-5s: %08x" % [ "ID", self.object_id ]   #=> "ID   : 200e14d6"
+          # "foo = %{foo}" % { :foo => 'bar' }        #=> "foo = bar"
+          templatized_noun = format(word_or_hash[:template_string], word_or_hash[:noun]) #  "$\1/sq. in."
+        else
+          templatized_noun = word_or_hash[:noun]
+        end
+        np = @@factory.create_noun_phrase templatized_noun
+        np.set_specifier( (spec = self.noun_phrase_helper(word_or_hash[:specifier] || word_or_hash[:spec]); spec.set_feature(Feature::POSSESSIVE, true) unless spec.nil?; spec) || word_or_hash[:determiner] || word_or_hash[:det])
+        [word_or_hash[:complement],word_or_hash[:complements],word_or_hash[:c]].flatten(1).compact.each do |complement|
+          np.add_complement self.phrase(complement) # to_s added for method signature reasons...
+        end
+        [word_or_hash[:prepositional_phrases], word_or_hash[:prepositional_phrase], word_or_hash[:pp]].flatten(1).compact.each do |pp|
+          prep_phrase = prep_phrase_helper pp
+          if pp[:position] == :front
+            np.add_front_modifier(prep_phrase)
+          elsif pp[:position] == :pre
+            np.add_pre_modifier(prep_phrase)
+          elsif pp[:position] == :post
+            np.add_post_modifier(prep_phrase)
+          else
+            np.add_post_modifier(prep_phrase)
+            # random default choice.)
+          end
+        end
         np
       else
         @@factory.create_noun_phrase word_or_hash
