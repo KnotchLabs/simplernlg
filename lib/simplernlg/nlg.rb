@@ -199,6 +199,19 @@ module SimplerNLG
       prep_phrase.set_feature(NLG::Feature::APPOSITIVE, pp[:appositive]) 
       # TODO: is it "appositive" if there's more than one word in the phrase? or if it's not an adverb and adjective?
       NLG.realizer.setCommaSepCuephrase(true) # ensures we get a comma (this, plus the appositive feature)
+      [pp[:prepositional_phrases], pp[:prepositional_phrase], pp[:pp]].flatten(1).compact.each do |nested_pp|
+        nested_prep_phrase = prep_phrase_helper nested_pp
+        if nested_pp[:position] == :front
+          prep_phrase.add_front_modifier(nested_prep_phrase)
+        elsif nested_pp[:position] == :pre
+          prep_phrase.add_pre_modifier(nested_prep_phrase)
+        elsif nested_pp[:position] == :post
+          prep_phrase.add_post_modifier(nested_prep_phrase)
+        else
+          prep_phrase.add_post_modifier(nested_prep_phrase)
+          # random default choice.)
+        end
+      end
       prep_phrase
     end
 
