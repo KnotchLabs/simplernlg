@@ -28,14 +28,14 @@ Alternatively you can just download the code and install the gem locally or (wor
 
 The range of applications goes from simple no-brainers like
 ```ruby
-SimpleNLG::NLG.render("mary is happy")
+SimplerNLG::NLG.render("mary is happy")
 #=> "Mary is happy."
 ```
 (notice the method-centric parameter syntax)
 
 over advanced concepts like
 ```ruby
-SimpleNLG::NLG[subject:%w[Kurt Linda], verb:"invite", object:%w[Jake Roswitha], tense:"past", negation:true]
+SimplerNLG::NLG[subject:%w[Kurt Linda], verb:"invite", object:%w[Jake Roswitha], tense:"past", negation:true]
 #=> "Kurt and Linda did not invite Jake and Roswitha."
 ```
 (notice the array accessor style)
@@ -43,7 +43,7 @@ SimpleNLG::NLG[subject:%w[Kurt Linda], verb:"invite", object:%w[Jake Roswitha], 
 all the way up to pretty crazy stuff like
 
 ```ruby
-SimpleNLG::NLG.render{
+SimplerNLG::NLG.render{
   phrase(
     s:"Igor", 
     v:[ 
