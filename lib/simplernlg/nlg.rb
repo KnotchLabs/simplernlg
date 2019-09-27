@@ -117,7 +117,7 @@ module SimplerNLG
         clause.set_feature Feature::TENSE, @@tenses[tense.to_sym]
       end
       with input[:nr] || input[:number] do |number|
-        number = number == 1 ? :singular : :plural if number.is_a? Fixnum
+        number = number == 1 ? :singular : :plural if number.is_a? Integer
         @@number ||= Hash[:singular => NumberAgreement::SINGULAR, :plural => NumberAgreement::PLURAL, :both => NumberAgreement::BOTH]
         clause.set_feature Feature::NUMBER, @@number[number.to_sym]
       end
